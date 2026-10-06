@@ -1,0 +1,6 @@
+work/
+artifacts/
+release/
+config/proxy.env
+*.rpm
+*.log

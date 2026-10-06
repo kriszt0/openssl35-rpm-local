@@ -1,46 +1,58 @@
-# OpenSSL 3.5 RPM factory — GitHub + REVISION
+# openssl35 GitHub revision RPM factory
 
-Oracle Linux 7 build flow for an isolated OpenSSL installation under `/opt/openssl35`.
+Builds an isolated OpenSSL 3.5.x RPM for Oracle Linux 7. The installed payload is always under `/opt/openssl35`; system OpenSSL is not replaced.
 
 ## Version
 
-Edit only `REVISION`, for example:
+Set only the desired 3.5.x release in `REVISION`, for example:
 
     3.5.9
 
-The source URL is generated as:
+## Proxy (optional)
 
-    https://github.com/openssl/openssl/releases/download/openssl-<REVISION>/openssl-<REVISION>.tar.gz
+Copy `config/proxy.env.example` to `config/proxy.env` and edit it. The file is gitignored. `fetch-source.sh` exports both upper- and lower-case proxy variables for curl.
 
-There is no `download/` directory and no offline source fallback.
+## Source/cache workflow
 
-## Source verification
+`make source` downloads the GitHub release tarball selected by `REVISION`. If `work/source/openssl-<REVISION>.tar.gz` already exists, it is reused as a cache hit. The archive is sanity-checked on every source invocation.
 
-Before build, `scripts/verify-source.sh` requires both independently pinned SHA256 and SHA1 values from:
+`make source` intentionally does not require an approved checksum file. This allows the source to be acquired first.
 
-    config/checksums/<REVISION>.env
+## Cryptographic verification
 
-Example:
+Before a build, create `config/checksums/<REVISION>.env` containing independently approved values:
 
-    SOURCE_SHA256="...64 hex chars..."
-    SOURCE_SHA1="...40 hex chars..."
+    SOURCE_SHA256="...64 hex characters..."
+    SOURCE_SHA1="...40 hex characters..."
 
-SHA256 is the primary integrity control. SHA1 is retained as an additional audit/legacy check. Never generate the approved reference hashes from the same downloaded file you are trying to verify.
+Do not populate these values merely by trusting the just-downloaded tarball. `make checksums` prints locally observed values only to help comparison with an independently trusted OpenSSL checksum source.
 
-## Commands
+Run:
 
-    make fetch
     make verify
+
+SHA256 is the security integrity check. SHA1 is retained as an additional audit/legacy check. Both are required by this repository before build.
+
+## Build
+
     make build JOBS=4
+
+The dependency chain is:
+
+    preflight -> source/cache -> verify -> build
+
+Therefore `make build` cannot bypass verification. `make build` does not run the separate RPM integration test.
+
+## Test
+
     make test
 
-`make build` automatically runs fetch + verify first, but does not run the RPM integration test. `make test` is separate.
+The test installs the RPM in a clean Oracle Linux 7 container and verifies `/opt/openssl35`, private `libssl.so.3`/`libcrypto.so.3`, ELF RPATH/RUNPATH, library resolution and OpenSSL smoke tests.
 
-Generated source is stored under `work/source/`; RPMs are written to `artifacts/`.
+## Cleaning
 
-## Source cache
+`make clean` removes build outputs but preserves the source cache.
 
-Downloaded GitHub release tarballs are cached under `work/source/`. A subsequent `make build` with the same `REVISION` skips the network download, but `verify-source.sh` still recalculates and validates both SHA256 and SHA1 before the RPM build starts. A checksum mismatch fails closed; the cached file is never silently accepted.
+`make clean-cache` removes downloaded source files.
 
-`make clean` preserves the source cache. Use `make clean-cache` to remove only cached source files, or `make distclean` to remove all generated state.
-
+`make distclean` removes all generated work, artifacts and release output.
